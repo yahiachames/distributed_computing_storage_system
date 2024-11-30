@@ -1,0 +1,106 @@
+version: "3"
+
+services:
+  django:
+    build:
+      context: ./ecommerce_back
+      args:
+        DB_NAME: ecommerce
+        DB_HOST: mongodb  # Corrected to the service name
+        DB_PORT: 27017
+    container_name: django_app
+    ports:
+      - "8000:8000"  # Expose Django app on localhost:8000
+    depends_on:
+      - mongodb
+      - redis
+    environment:
+      - SECRET_KEY=kobl@t=yw9d*0y%jt2gjnq78=u!z_rrxb&w8e47l!(jz@m79zy
+      - DEBUG=True
+      - DB_NAME=ecommerce
+      - DB_HOST=mongodb  # Corrected to the service name
+      - DB_PORT=27017
+      - CELERY_BROKER_URL=redis://redis:6379/0  # Celery broker URL
+      - MONGO_INITDB_ROOT_USERNAME=root
+      - MONGO_INITDB_ROOT_PASSWORD=example0
+    command: python manage.py runserver 0.0.0.0:8000  # Corrected internal port to match mapping
+    volumes:
+      - ./ecommerce_back:/app
+      - ./media:/app/media
+      - ./static:/app/static
+    networks:
+      - app_network
+
+  mongodb:
+    image: mongo:4.4
+    container_name: mongodb
+    ports:
+      - "27017:27017"  # Expose MongoDB on localhost:27017
+    environment:
+      - MONGO_INITDB_ROOT_USERNAME=root
+      - MONGO_INITDB_ROOT_PASSWORD=example0
+    volumes:
+      - mongodb_data:/data/db
+      - ./init-mongo.js:/docker-entrypoint-initdb.d/init-mongo.js:ro
+    networks:
+      - app_network
+
+  redis:
+    image: redis:latest
+    container_name: redis
+    ports:
+      - "6379:6379"
+    networks:
+      - app_network
+
+  celery:
+    build:
+      context: ./ecommerce_back
+    container_name: celery_worker
+    command: celery --app=djecommerce worker --loglevel=info
+    depends_on:
+      - django
+      - redis
+    environment:
+      - CELERY_BROKER_URL=redis://redis:6379/0
+    volumes:
+      - ./ecommerce_back:/app
+    networks:
+      - app_network
+
+  celery-beat:
+    build:
+      context: ./ecommerce_back
+    container_name: celery_beat
+    command: ["celery", "-A", "djecommerce", "beat", "--loglevel=info"]
+    depends_on:
+      - django
+      - redis
+    environment:
+      - CELERY_BROKER_URL=redis://redis:6379/0
+    volumes:
+      - ./ecommerce_back:/app
+    networks:
+      - app_network
+
+  flower:
+    build:
+      context: ./ecommerce_back
+    command: celery -A djecommerce flower --port=5555 --address=0.0.0.0
+    container_name: flower
+    ports:
+      - "5555:5555"
+    depends_on:
+      - redis
+      - celery
+      - celery-beat
+    networks:
+      - app_network
+
+networks:
+  app_network:
+    driver: bridge
+
+volumes:
+  mongodb_data:
+    driver: local
