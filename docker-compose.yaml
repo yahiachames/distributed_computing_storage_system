@@ -96,6 +96,17 @@ services:
       - celery-beat
     networks:
       - app_network
+  logstash:
+    build:
+      context: ./logstash
+    container_name: logstash
+    depends_on:
+      - redis
+    ports:
+      - "5044:5044"  # Logstash input port
+
+    networks:
+      - app_network
 
 networks:
   app_network:
